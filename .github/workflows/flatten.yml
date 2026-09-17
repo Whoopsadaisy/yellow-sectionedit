@@ -1,0 +1,57 @@
+name: Flatten SectionEdit worker
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  flatten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build single worker
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          parts = [Path(f"sectionedit-part{i}.php").read_text() for i in range(1, 7)]
+          body = []
+          public = {"onParsePageOutput", "onParsePageExtra", "onRequest", "scan"}
+          for text in parts:
+              text = re.sub(r'^<\?php\s*', '', text, count=1)
+              text = re.sub(r'^trait\s+YellowSectioneditPart\d+\s*\{\s*', '', text, count=1)
+              text = re.sub(r'\s*\}\s*$', '', text)
+              text = re.sub(r'(?m)^function\s+(\w+)\s*\(', lambda m: ('    public function ' if m.group(1) in public else '    private function ') + m.group(1) + '(', text)
+              body.append(text.strip())
+
+          header = '''<?php
+// Section edit extension for Datenstrom Yellow 0.9.
+// Keeps the normal /edit/ editor untouched and delegates saving/merging
+// to YellowEditResponse::getPageEdit().
+
+class YellowSectionedit {
+    const VERSION = "0.1.23";
+    const PRIORITY = "0";
+    public $yellow;
+
+    public function onLoad($yellow) {
+        $this->yellow = $yellow;
+        $this->yellow->system->setDefault("sectioneditLocation", "/edit/");
+    }
+'''
+          Path("sectionedit.php").write_text(header + "\n\n".join(body) + "\n}\n")
+          PY
+
+      - name: Remove split worker files and temporary workflow
+        run: |
+          rm sectionedit-part1.php sectionedit-part2.php sectionedit-part3.php sectionedit-part4.php sectionedit-part5.php sectionedit-part6.php
+          rm .github/workflows/flatten.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sectionedit.php .github/workflows/flatten.yml sectionedit-part*.php
+          git commit -m "Use single-file SectionEdit worker"
+          git push
