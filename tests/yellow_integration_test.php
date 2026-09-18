@@ -87,8 +87,8 @@ same("content/2-wiki/juniper-vpn.md", $fileName, "SectionEdit must resolve file 
 $urlsMethod = new ReflectionMethod("YellowSectionedit", "getEditorUrls");
 $urlsMethod->setAccessible(true);
 list($actionUrl, $cancelUrl) =
-    $urlsMethod->invoke($sectionedit, "http", "example.test", "/yellow", "/wiki/", "1.1", "## Pages\n\nSome text\n");
-same("http://example.test/yellow/edit/wiki/?action=edit&section=1.1", $actionUrl, "SectionEdit action URL must retain the directory trailing slash");
+    $urlsMethod->invoke($sectionedit, "http", "example.test", "/yellow", "/wiki/", "1", "## Pages\n\nSome text\n");
+same("http://example.test/yellow/edit/wiki/?action=edit&section=1", $actionUrl, "SectionEdit action URL must retain the directory trailing slash");
 same("http://example.test/yellow/wiki/#pages", $cancelUrl, "SectionEdit cancel URL must retain the directory trailing slash");
 
 echo "PASS: SectionEdit URL generation/refactoring tests\n";
