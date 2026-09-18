@@ -28,9 +28,9 @@ jobs:
           php tests/yellow_integration_test.php
 
       - name: Build SectionEdit package
-        run: zip -j sectionedit-0.1.27.zip sectionedit.php extension.ini
+        run: zip -j yellow-sectionedit-0.1.27.zip sectionedit.php extension.ini
       - name: Upload SectionEdit package
         uses: actions/upload-artifact@v4
         with:
-          name: sectionedit-0.1.27
-          path: sectionedit-0.1.27.zip
+          name: yellow-sectionedit-0.1.27
+          path: yellow-sectionedit-0.1.27.zip
