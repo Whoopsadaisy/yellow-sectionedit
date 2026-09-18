@@ -95,17 +95,29 @@ class YellowSectionedit {
         list($scheme, $address, $editBase, $pageLocation, $pageFileName) =
             $this->yellow->lookup->getRequestInformation($scheme, $address, $editBase);
 
-        // YellowEdit's lookup treats a trailing slash as a request for the
-        // default page inside a directory. For SectionEdit we need the actual
-        // content page represented by the URL below /edit/. Resolve that
-        // content location explicitly, while keeping editBase for all editor
-        // authentication/response handling.
+        // Resolve the content location below /edit/. Keep a trailing slash
+        // for the first lookup: in Yellow, /wiki/ can legitimately mean the
+        // directory page content/2-wiki/page.md. If that lookup does not find a
+        // readable content file, retry without the trailing slash so a file page
+        // such as /wiki/juniper-vpn/ can resolve to
+        // content/2-wiki/juniper-vpn.md.
         $editPrefix = rtrim($this->yellow->system->get("editLocation"), "/");
         $pageLocation = substru($location, strlenu($editPrefix));
         $pageLocation = "/" . ltrim($pageLocation, "/");
-        $pageLocation = rtrim($pageLocation, "/");
         if ($pageLocation === "") $pageLocation = "/";
+
         $pageFileName = $this->yellow->lookup->findFileFromContentLocation($pageLocation);
+        if (!$this->yellow->lookup->isContentFile($pageFileName) ||
+            !is_file($pageFileName)) {
+            $trimmedLocation = rtrim($pageLocation, "/");
+            if ($trimmedLocation === "") $trimmedLocation = "/";
+            $trimmedFileName = $this->yellow->lookup->findFileFromContentLocation($trimmedLocation);
+            if ($this->yellow->lookup->isContentFile($trimmedFileName) &&
+                is_file($trimmedFileName)) {
+                $pageLocation = $trimmedLocation;
+                $pageFileName = $trimmedFileName;
+            }
+        }
 
         return $this->processRequest($scheme, $address, $editBase, $pageLocation, $pageFileName);
     }
