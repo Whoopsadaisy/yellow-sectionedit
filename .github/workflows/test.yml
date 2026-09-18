@@ -16,3 +16,9 @@ jobs:
         run: php -l sectionedit.php
       - name: Section scanner regression tests
         run: php tests/sectionedit_test.php
+
+      - name: Yellow 0.9 integration tests
+        run: |
+          git clone --depth 1 --branch 0.9 https://github.com/datenstrom/yellow.git /tmp/yellow
+          export YELLOW_ROOT=/tmp/yellow
+          php tests/yellow_integration_test.php
