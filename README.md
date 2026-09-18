@@ -4,7 +4,7 @@ SectionEdit adds editing of individual Markdown sections while keeping Yellow's 
 
 ## Version
 
-0.1.23
+0.1.28
 
 ## Requirements
 
