@@ -23,17 +23,8 @@ file_put_contents("$root/content/2-wiki/page.md", "## Pages\n\nSome text\n");
 file_put_contents("$root/content/2-wiki/juniper-vpn.md", "## Juniper VPN\n");
 
 $yellow = new YellowCore();
-$yellow->system->set("coreContentDirectory", "content/");
-$yellow->system->set("coreContentDefaultFile", "page.md");
-$yellow->system->set("coreContentExtension", ".md");
-$yellow->system->set("coreServerRootDirectory", "");
-$yellow->system->set("coreServerHomeDirectory", "1-home/");
-$yellow->system->set("coreServerScheme", "http");
-$yellow->system->set("coreServerAddress", "example.test");
-$yellow->system->set("coreServerBase", "/yellow");
-
-$edit = new YellowEdit();
-$edit->onLoad($yellow);
+$yellow->load();
+$edit = $yellow->extension->get("edit");
 
 same(
     "content/2-wiki/page.md",
