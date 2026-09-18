@@ -4,7 +4,7 @@
 // to YellowEditResponse::getPageEdit().
 
 class YellowSectionedit {
-    const VERSION = "0.1.23";
+    const VERSION = "0.1.26";
     const PRIORITY = "0";
     public $yellow;
 
@@ -96,7 +96,7 @@ class YellowSectionedit {
             $this->yellow->lookup->getRequestInformation($scheme, $address, $editBase);
 
         // YellowEdit's lookup treats a trailing slash as a request for the
-        // default page inside a directory. For SectionEdit we need the actuale actual
+        // default page inside a directory. For SectionEdit we need the actual
         // content page represented by the URL below /edit/. Resolve that
         // content location explicitly, while keeping editBase for all editor
         // authentication/response handling.
@@ -145,8 +145,10 @@ class YellowSectionedit {
         // directory is not guaranteed to be the Yellow root. Yellow's own
         // toolbox must be used for filesystem access.
         $rawDataSource = $this->yellow->toolbox->readFile($fileName);
-        $endOfLine = $edit->response->getPageData($this->yellow->page);
-        $endOfLine = isset($endOfLine["rawDataEndOfLine"]) ? $endOfLine["rawDataEndOfLine"] : "auto";
+        // Determine the line-ending format directly from the source. Do not call
+        // YellowEditResponse::getPageData() here: that method expects its response
+        // rawDataEdit state to have been initialized by YellowEdit first.
+        $endOfLine = $edit->response->getEndOfLine($rawDataSource);
 
         if ($_SERVER["REQUEST_METHOD"] === "POST") {
             return $this->saveSection(
@@ -189,6 +191,13 @@ class YellowSectionedit {
             return $this->yellow->processRequestError();
         }
 
+        // If the section is followed by another heading, keep at least one line
+        // ending between the edited section and that heading. The editor is allowed
+        // to remove the final newline from the textarea, but Markdown headings must
+        // not be glued directly to the preceding text.
+        if ($section["end"] < strlen($postedSource) && !preg_match('/(?:\r\n|\r|\n)$/', $sectionEdit)) {
+            $sectionEdit .= ($postedEol === "crlf" ? "\r\n" : "\n");
+        }
         $rawDataEdit =
             substr($postedSource, 0, $section["start"]) .
             $sectionEdit .
