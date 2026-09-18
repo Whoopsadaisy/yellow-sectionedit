@@ -26,6 +26,9 @@ $cwd = getcwd();
 chdir($root);
 $yellow = new YellowCore();
 $yellow->load();
+$yellow->system->set("coreServerScheme", "http");
+$yellow->system->set("coreServerAddress", "example.test");
+$yellow->system->set("coreServerBase", "/yellow");
 $edit = $yellow->extension->get("edit");
 
 same(
