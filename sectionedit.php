@@ -267,9 +267,15 @@ class YellowSectionedit {
         $html = '<!doctype html><html><head><meta charset="utf-8">';
         $html .= '<meta name="viewport" content="width=device-width,initial-scale=1">';
         $html .= '<title>Edit: ' . $title . '</title>';
-        // Load the same site theme as a normal Yellow page so typography,
-        // @font-face definitions and basic page metrics are identical.
-        $theme = $this->yellow->page->get("theme");
+        // Resolve the theme from the actual content page. At this point
+        // YellowCore has not rendered the content page yet, so
+        // $this->yellow->page may still describe the /edit/ request rather than
+        // the page being edited. Build a page from the source metadata exactly
+        // like YellowEditResponse::getPageEdit() does.
+        $themePage = new YellowPage($this->yellow);
+        $themePage->setRequestInformation($scheme, $address, $base, $location, $fileName, false);
+        $themePage->parseMeta($rawDataSource, 200);
+        $theme = $themePage->get("theme");
         $themeName = $this->yellow->lookup->normaliseName($theme);
         $themeFile = $this->yellow->system->get("coreThemeDirectory") . $themeName . ".css";
         if (is_file($themeFile)) {
@@ -559,6 +565,8 @@ class YellowSectionedit {
     }
 
     private function getCss() {
-        return '.sectionedit-body{font-family:var(--font,"Open Sans",Helvetica,sans-serif);font-size:1em;font-weight:300;line-height:1.5}.sectionedit{position:relative;display:block;box-sizing:border-box;width:100%;max-width:1100px;margin:1em auto 0;padding:10px;background-color:#fff;color:#000;border:1px solid #bbb;border-radius:4px;box-shadow:2px 4px 10px rgba(0,0,0,.2);text-align:left}.sectionedit form{margin:0}.sectionedit-toolbar-main{margin-left:8px}.sectionedit .yellow-edit-text{box-sizing:border-box;width:100%;min-height:65vh;padding:0 2px;outline:none;resize:none;border:0;background:transparent;color:inherit;font-size:.9em;font-family:inherit;font-weight:normal;line-height:normal;display:block;overflow:auto}.sectionedit .yellow-edit-preview{box-sizing:border-box;width:100%;min-height:65vh;padding:0;overflow:auto;border:0;background:#fff}.sectionedit .yellow-toolbar-btn-icon{cursor:pointer}.sectionedit .yellow-toolbar-btn-icon:hover{cursor:pointer}';
+        // Do not define a font here. The active Yellow theme owns typography;
+        // SectionEdit must inherit it just like the normal /edit/ page.
+        return '.sectionedit-body{font-size:1em;line-height:1.5}.sectionedit{position:relative;display:block;box-sizing:border-box;width:100%;max-width:1100px;margin:1em auto 0;padding:10px;background-color:#fff;color:#000;border:1px solid #bbb;border-radius:4px;box-shadow:2px 4px 10px rgba(0,0,0,.2);text-align:left}.sectionedit form{margin:0}.sectionedit-toolbar-main{margin-left:8px}.sectionedit .yellow-edit-text{box-sizing:border-box;width:100%;min-height:65vh;padding:0 2px;outline:none;resize:none;border:0;background:transparent;color:inherit;font-size:.9em;font-family:inherit;font-weight:normal;line-height:normal;display:block;overflow:auto}.sectionedit .yellow-edit-preview{box-sizing:border-box;width:100%;min-height:65vh;padding:0;overflow:auto;border:0;background:#fff}.sectionedit .yellow-toolbar-btn-icon{cursor:pointer}.sectionedit .yellow-toolbar-btn-icon:hover{cursor:pointer}';
     }
 }
