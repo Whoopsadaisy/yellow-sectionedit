@@ -83,11 +83,16 @@ class YellowSectionedit {
         if (!$this->isSectioneditLocation($location)) return 0;
         if (is_string_empty($this->yellow->page->getRequest("section"))) return 0;
 
-        // Reproduce YellowEdit::onRequest() exactly. YellowEdit does not simply
-        // remove /edit/ and call findFileFromContentLocation(). It changes the
-        // request base to coreServerBase + editLocation and then calls
-        // getRequestInformation(). This is the lookup we need to share with the
-        // normal editor.
+        list($scheme, $address, $editBase, $pageLocation, $pageFileName) =
+            $this->getEditPageInformation($scheme, $address, $base, $location);
+
+        return $this->processRequest($scheme, $address, $editBase, $pageLocation, $pageFileName);
+    }
+
+    // Resolve the page below the /edit/ URL using the same base calculation
+    // as YellowEdit. Preserve the trailing slash for the first content lookup;
+    // only fall back to the slashless location when Yellow cannot resolve it.
+    private function getEditPageInformation($scheme, $address, $base, $location) {
         $editBase = rtrim(
             $this->yellow->system->get("coreServerBase") .
             $this->yellow->system->get("editLocation"), "/"
@@ -95,31 +100,23 @@ class YellowSectionedit {
         list($scheme, $address, $editBase, $pageLocation, $pageFileName) =
             $this->yellow->lookup->getRequestInformation($scheme, $address, $editBase);
 
-        // Resolve the content location below /edit/. Keep a trailing slash
-        // for the first lookup: in Yellow, /wiki/ can legitimately mean the
-        // directory page content/2-wiki/page.md. If that lookup does not find a
-        // readable content file, retry without the trailing slash so a file page
-        // such as /wiki/juniper-vpn/ can resolve to
-        // content/2-wiki/juniper-vpn.md.
         $editPrefix = rtrim($this->yellow->system->get("editLocation"), "/");
         $pageLocation = substru($location, strlenu($editPrefix));
         $pageLocation = "/" . ltrim($pageLocation, "/");
         if ($pageLocation === "") $pageLocation = "/";
 
         $pageFileName = $this->yellow->lookup->findFileFromContentLocation($pageLocation);
-        if (!$this->yellow->lookup->isContentFile($pageFileName) ||
-            !is_file($pageFileName)) {
+        if (!$this->yellow->lookup->isContentFile($pageFileName) || !is_file($pageFileName)) {
             $trimmedLocation = rtrim($pageLocation, "/");
             if ($trimmedLocation === "") $trimmedLocation = "/";
             $trimmedFileName = $this->yellow->lookup->findFileFromContentLocation($trimmedLocation);
-            if ($this->yellow->lookup->isContentFile($trimmedFileName) &&
-                is_file($trimmedFileName)) {
+            if ($this->yellow->lookup->isContentFile($trimmedFileName) && is_file($trimmedFileName)) {
                 $pageLocation = $trimmedLocation;
                 $pageFileName = $trimmedFileName;
             }
         }
 
-        return $this->processRequest($scheme, $address, $editBase, $pageLocation, $pageFileName);
+        return array($scheme, $address, $editBase, $pageLocation, $pageFileName);
     }
 
     private function isSectioneditLocation($location) {
@@ -163,6 +160,9 @@ class YellowSectionedit {
         $endOfLine = $edit->response->getEndOfLine($rawDataSource);
 
         if ($_SERVER["REQUEST_METHOD"] === "POST") {
+            if ($this->yellow->page->getRequest("action") === "preview") {
+                return $this->showPreview($edit, $scheme, $address, $base, $location, $fileName, $endOfLine);
+            }
             return $this->saveSection(
                 $edit, $scheme, $address, $base, $location, $fileName,
                 $rawDataSource, $endOfLine
@@ -173,6 +173,25 @@ class YellowSectionedit {
             $edit, $scheme, $address, $base, $location, $fileName,
             $rawDataSource, $endOfLine
         );
+    }
+
+    private function showPreview($edit, $scheme, $address, $base, $location, $fileName, $endOfLine) {
+        $rawDataEdit = $this->yellow->page->getRequest("rawdataedit");
+        if (is_string_empty($rawDataEdit)) {
+            $this->yellow->page->error(400, "Missing preview data.");
+            return $this->yellow->processRequestError();
+        }
+
+        $page = $edit->response->getPagePreview(
+            $scheme, $address, $base, $location, $fileName,
+            $rawDataEdit, $endOfLine
+        );
+        $page->headerData = array(
+            "Cache-Control" => "no-cache, no-store",
+            "Content-Type" => $this->yellow->toolbox->getMimeContentType("a.html"),
+            "Last-Modified" => $this->yellow->toolbox->getHttpDateFormatted(time())
+        );
+        return $this->yellow->sendData($page->statusCode, $page->headerData, $page->outputData);
     }
 
     private function getSectionId() {
@@ -254,16 +273,9 @@ class YellowSectionedit {
 
         $sectionText = substr($rawDataSource, $section["start"], $section["end"] - $section["start"]);
         $csrf = $this->yellow->toolbox->getCookie("yellowcsrftoken");
-        $actionUrl = $this->yellow->lookup->normaliseUrl(
-            $scheme, $address,
-            $this->yellow->system->get("coreServerBase"),
-            rtrim($this->yellow->system->get("sectioneditLocation"), "/") . $location
+        list($actionUrl, $cancelUrl) = $this->getEditorUrls(
+            $scheme, $address, $base, $location, $sectionId, $rawDataSource
         );
-        $actionUrl .= (strpos($actionUrl, "?") === false ? "?" : "&") .
-            "action=edit&section=" . rawurlencode($sectionId);
-        $cancelUrl = $this->yellow->lookup->normaliseUrl($scheme, $address, $base, $location);
-        $cancelAnchor = $this->getSectionAnchor($rawDataSource, $sectionId);
-        if (!is_string_empty($cancelAnchor)) $cancelUrl .= "#" . rawurlencode($cancelAnchor);
 
         $title = htmlspecialchars($section["title"], ENT_QUOTES, "UTF-8");
         $text = htmlspecialchars($sectionText, ENT_QUOTES, "UTF-8");
@@ -335,12 +347,28 @@ class YellowSectionedit {
         $html .= 'function block(prefix){var v=text.value,a=text.selectionStart,b=text.selectionEnd,start=a;while(start>0&&v.charAt(start-1)!="\n")start--;var end=b;while(end<v.length&&v.charAt(end)!="\n")end++;var s=v.slice(start,end);if(s.slice(0,prefix.length)===prefix){s=s.split("\n").map(function(x){return x.slice(prefix.length);}).join("\n");}else{s=s.split("\n").map(function(x){return prefix+x;}).join("\n");}text.value=v.slice(0,start)+s+v.slice(end);text.focus();text.setSelectionRange(start,start+s.length);}';
         $html .= 'function link(){var url=window.prompt("URL:","https://");if(url===null)return;var a=text.selectionStart,b=text.selectionEnd,v=text.value,s=v.slice(a,b);var ins=s?"["+s+"]("+url+")":"[link]("+url+")";text.value=v.slice(0,a)+ins+v.slice(b);text.focus();text.setSelectionRange(a+ins.length,a+ins.length);}';
         $html .= 'function format(){var p=window.prompt("Format:","h2");if(p==="h1"||p==="h2"||p==="h3")block(p==="h1"?"# ":p==="h2"?"## ":"### ");}';
-        $html .= 'function togglePreview(){if(!preview.hasAttribute("hidden")){preview.hidden=true;text.hidden=false;return;}var payload=new FormData();payload.append("action","preview");payload.append("yellowcsrftoken",document.querySelector("input[name=yellowcsrftoken]").value);payload.append("rawdataedit",text.value);payload.append("rawdataendofline",document.querySelector("input[name=rawdataendofline]").value);var xhr=new XMLHttpRequest();xhr.open("POST",window.location.pathname,true);xhr.onload=function(){if(xhr.status===200){preview.innerHTML=xhr.responseText;text.hidden=true;preview.hidden=false;}};xhr.send(payload);}';
+        $html .= 'function togglePreview(){if(!preview.hasAttribute("hidden")){preview.hidden=true;text.hidden=false;return;}var payload=new FormData();payload.append("action","preview");payload.append("yellowcsrftoken",document.querySelector("input[name=yellowcsrftoken]").value);payload.append("rawdataedit",text.value);payload.append("rawdataendofline",document.querySelector("input[name=rawdataendofline]").value);var xhr=new XMLHttpRequest();xhr.open("POST",window.location.pathname+window.location.search,true);xhr.onload=function(){if(xhr.status===200){preview.innerHTML=xhr.responseText;text.hidden=true;preview.hidden=false;}};xhr.send(payload);}';
         $html .= 'document.querySelectorAll("[data-section-action]").forEach(function(el){el.addEventListener("click",function(e){e.preventDefault();var a=el.getAttribute("data-section-action");if(a==="bold")wrap("**","**");else if(a==="italic")wrap("*","*");else if(a==="strikethrough")wrap("~~","~~");else if(a==="code")wrap("`","`");else if(a==="list")block("* ");else if(a==="link")link();else if(a==="format")format();else if(a==="preview")togglePreview();else if(a==="save")form.submit();});});';
         $html .= 'focusText();})();';
         $html .= '</script></body></html>';
 
         return $this->yellow->sendData(200, array("Content-Type" => "text/html; charset=UTF-8", "Cache-Control" => "no-cache, no-store"), $html);
+    }
+
+    private function getEditorUrls($scheme, $address, $base, $location, $sectionId, $rawDataSource) {
+        $actionUrl = $this->yellow->lookup->normaliseUrl(
+            $scheme, $address,
+            $this->yellow->system->get("coreServerBase"),
+            rtrim($this->yellow->system->get("sectioneditLocation"), "/") . $location
+        );
+        $actionUrl .= (strpos($actionUrl, "?") === false ? "?" : "&") .
+            "action=edit&section=" . rawurlencode($sectionId);
+
+        $cancelUrl = $this->yellow->lookup->normaliseUrl($scheme, $address, $base, $location);
+        $cancelAnchor = $this->getSectionAnchor($rawDataSource, $sectionId);
+        if (!is_string_empty($cancelAnchor)) $cancelUrl .= "#" . rawurlencode($cancelAnchor);
+
+        return array($actionUrl, $cancelUrl);
     }
 
     // Yellow's Markdown parser generates heading IDs from the heading text
@@ -376,8 +404,8 @@ class YellowSectionedit {
 
     private function showFileDiagnostic($location, $fileName) {
         $contentFile = $this->yellow->lookup->isContentFile($fileName);
-        $readable = !is_string_empty($fileName);
-        $html = $this->diagnosticStart("SectionEdit 0.1.14 - file diagnostic");
+        $readable = $this->yellow->lookup->isContentFile($fileName) && is_file($fileName);
+        $html = $this->diagnosticStart("SectionEdit " . self::VERSION . " - file diagnostic");
         $html .= '<h1>SectionEdit: file could not be resolved</h1>';
         $html .= '<dl>';
         $html .= $this->diagnosticRow("Location", $location);
@@ -391,7 +419,7 @@ class YellowSectionedit {
     }
 
     private function showSectionDiagnostic($location, $fileName, $sectionId, $sections, $base) {
-        $html = $this->diagnosticStart("SectionEdit 0.1.14 - section diagnostic");
+        $html = $this->diagnosticStart("SectionEdit " . self::VERSION . " - section diagnostic");
         $html .= '<h1>SectionEdit: section not found</h1>';
         $html .= $this->diagnosticRow("Requested section", $sectionId === "" ? "(empty/invalid)" : $sectionId);
         $html .= $this->diagnosticRow("Location", $location);
