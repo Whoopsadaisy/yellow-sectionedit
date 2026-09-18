@@ -4,7 +4,7 @@
 // to YellowEditResponse::getPageEdit().
 
 class YellowSectionedit {
-    const VERSION = "0.1.26";
+    const VERSION = "0.1.27";
     const PRIORITY = "0";
     public $yellow;
 
