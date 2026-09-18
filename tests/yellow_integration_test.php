@@ -67,4 +67,29 @@ same(
     "YellowEdit must generate the file edit URL without trailing slash"
 );
 
-echo "PASS: real Yellow lookup/edit URL integration tests\n";
+
+$sectionedit = new YellowSectionedit();
+$sectionedit->onLoad($yellow);
+
+$lookupMethod = new ReflectionMethod("YellowSectionedit", "getEditPageInformation");
+$lookupMethod->setAccessible(true);
+
+list($scheme, $address, $base, $location, $fileName) =
+    $lookupMethod->invoke($sectionedit, "http", "example.test", "/yellow", "/edit/wiki/");
+same("/wiki/", $location, "SectionEdit must preserve the trailing slash for directory pages");
+same("content/2-wiki/page.md", $fileName, "SectionEdit must resolve /edit/wiki/ to the directory page");
+
+list($scheme, $address, $base, $location, $fileName) =
+    $lookupMethod->invoke($sectionedit, "http", "example.test", "/yellow", "/edit/wiki/juniper-vpn");
+same("/wiki/juniper-vpn", $location, "SectionEdit must preserve file-page locations without a trailing slash");
+same("content/2-wiki/juniper-vpn.md", $fileName, "SectionEdit must resolve file pages below /edit/");
+
+$urlsMethod = new ReflectionMethod("YellowSectionedit", "getEditorUrls");
+$urlsMethod->setAccessible(true);
+list($actionUrl, $cancelUrl) =
+    $urlsMethod->invoke($sectionedit, "http", "example.test", "/yellow", "/wiki/", "1.1", "## Pages\n\nSome text\n");
+same("http://example.test/yellow/edit/wiki/?action=edit&section=1.1", $actionUrl, "SectionEdit action URL must retain the directory trailing slash");
+same("http://example.test/yellow/wiki/#pages", $cancelUrl, "SectionEdit cancel URL must retain the directory trailing slash");
+
+echo "PASS: SectionEdit URL generation/refactoring tests\n";
+
