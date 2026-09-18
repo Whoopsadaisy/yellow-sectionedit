@@ -19,6 +19,10 @@ jobs:
 
       - name: Yellow 0.9 integration tests
         run: |
-          git clone --depth 1 --branch 0.9 https://github.com/datenstrom/yellow.git /tmp/yellow
+          git clone --depth 1 https://github.com/datenstrom/yellow.git /tmp/yellow
+          cd /tmp/yellow
+          git fetch --depth 1 origin 38e565c205f6269e27539c8b92b93b67a51bb398
+          git checkout --detach 38e565c205f6269e27539c8b92b93b67a51bb398
+          cd -
           export YELLOW_ROOT=/tmp/yellow
           php tests/yellow_integration_test.php
