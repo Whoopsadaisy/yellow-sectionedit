@@ -47,7 +47,7 @@ class YellowSectionedit {
         if (count($headingSections) > 0) {
             $index = 0;
             $modifiedContent = preg_replace_callback(
-                '#(<h([1-6])\\b[^>]*>)(.*?)(</h\\2>)#is',
+                '#(<h([1-6])\b[^>]*>)(.*?)(</h\2>)#is',
                 function($matches) use (&$index, $headingSections, $baseUrl) {
                     if ($index >= count($headingSections)) return $matches[0];
                     $section = $headingSections[$index++];
@@ -70,7 +70,7 @@ class YellowSectionedit {
             $label = htmlspecialchars("Edit page introduction", ENT_QUOTES, "UTF-8");
             $link = '<a class="sectionedit-link sectionedit-page-link" href="' . $url . '" title="' . $label . '" aria-label="' . $label . '">✎</a>';
             $modifiedTitle = preg_replace_callback(
-                '#(<h1\\b[^>]*>)(.*?)(</h1>)#is',
+                '#(<h1\b[^>]*>)(.*?)(</h1>)#is',
                 function($matches) use ($link) {
                     if (strpos($matches[0], "sectionedit-link") !== false) return $matches[0];
                     return $matches[1] . $matches[2] . ' ' . $link . $matches[3];
@@ -211,7 +211,7 @@ class YellowSectionedit {
 
     private function getSectionId() {
         $id = trim($this->yellow->page->getRequest("section"));
-        return preg_match('/^(?:0|[1-9][0-9]*(?:\\.[1-9][0-9]*)*)$/', $id) ? $id : "";
+        return preg_match('/^(?:0|[1-9][0-9]*(?:\.[1-9][0-9]*)*)$/', $id) ? $id : "";
     }
 
     private function saveSection($edit, $scheme, $address, $base, $location, $fileName, $rawDataSource, $endOfLine) {
