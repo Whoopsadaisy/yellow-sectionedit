@@ -4,7 +4,7 @@
 // to YellowEditResponse::getPageEdit().
 
 class YellowSectionedit {
-    const VERSION = "0.1.28";
+    const VERSION = "0.1.29";
     const PRIORITY = "0";
     public $yellow;
 
@@ -24,16 +24,15 @@ class YellowSectionedit {
         $edit = $this->yellow->extension->isExisting("edit") ?
             $this->yellow->extension->get("edit") : null;
         if (!$edit || !$edit->editable || is_string_empty($text)) return null;
-
-        // At this stage all onParseContentHtml hooks have already run, so
-        // $page->parserData contains the final content HTML (including TOC).
-        // Modify that content only; processing the complete page output would
-        // also count headings from the Yellow layout itself.
         $content = $page->parserData;
         if (is_string_empty($content)) return null;
 
         $sections = $this->scan($page->rawData);
-        if (count($sections) == 0) return null;
+        $preamble = $this->findSection($sections, "0");
+        $headingSections = array_values(array_filter($sections, function($section) {
+            return $section["type"] !== "preamble";
+        }));
+        if (!$preamble && count($headingSections) === 0) return null;
 
         $baseUrl = $page->get("editPageUrl");
         if (is_string_empty($baseUrl)) {
@@ -44,28 +43,44 @@ class YellowSectionedit {
             );
         }
 
-        $index = 0;
-        $modifiedContent = preg_replace_callback(
-            '#(<h([1-6])\b[^>]*>)(.*?)(</h\2>)#is',
-            function($matches) use (&$index, $sections, $baseUrl) {
-                if ($index >= count($sections)) return $matches[0];
-                $section = $sections[$index++];
-                $level = (int)$matches[2];
-                if ($level != $section["level"]) return $matches[0];
-
-                $url = $baseUrl . (strpos($baseUrl, "?") === false ? "?" : "&") .
-                    "section=" . rawurlencode($section["id"]);
-                $url = htmlspecialchars($url, ENT_QUOTES, "UTF-8");
-                $label = htmlspecialchars("Edit section " . $section["id"], ENT_QUOTES, "UTF-8");
-                $link = '<a class="sectionedit-link" href="' . $url . '" title="' . $label . '" aria-label="' . $label . '">✎</a>';
-                return $matches[1] . $matches[3] . ' ' . $link . $matches[4];
-            },
-            $content
-        );
-        if (is_null($modifiedContent) || $modifiedContent === $content) return null;
-
-        // Replace the already rendered content fragment in the final page.
-        return str_replace($content, $modifiedContent, $text);
+        $modifiedContent = $content;
+        if (count($headingSections) > 0) {
+            $index = 0;
+            $modifiedContent = preg_replace_callback(
+                '#(<h([1-6])\\b[^>]*>)(.*?)(</h\\2>)#is',
+                function($matches) use (&$index, $headingSections, $baseUrl) {
+                    if ($index >= count($headingSections)) return $matches[0];
+                    $section = $headingSections[$index++];
+                    if ((int)$matches[2] != $section["level"]) return $matches[0];
+                    $url = $baseUrl . (strpos($baseUrl, "?") === false ? "?" : "&") .
+                        "section=" . rawurlencode($section["id"]);
+                    $url = htmlspecialchars($url, ENT_QUOTES, "UTF-8");
+                    $label = htmlspecialchars("Edit section " . $section["id"], ENT_QUOTES, "UTF-8");
+                    $link = '<a class="sectionedit-link" href="' . $url . '" title="' . $label . '" aria-label="' . $label . '">✎</a>';
+                    return $matches[1] . $matches[3] . ' ' . $link . $matches[4];
+                },
+                $content
+            );
+            if (is_null($modifiedContent)) $modifiedContent = $content;
+        }
+        $modifiedText = str_replace($content, $modifiedContent, $text);
+        if ($preamble) {
+            $url = $baseUrl . (strpos($baseUrl, "?") === false ? "?" : "&") . "section=0";
+            $url = htmlspecialchars($url, ENT_QUOTES, "UTF-8");
+            $label = htmlspecialchars("Edit page introduction", ENT_QUOTES, "UTF-8");
+            $link = '<a class="sectionedit-link sectionedit-page-link" href="' . $url . '" title="' . $label . '" aria-label="' . $label . '">✎</a>';
+            $modifiedTitle = preg_replace_callback(
+                '#(<h1\\b[^>]*>)(.*?)(</h1>)#is',
+                function($matches) use ($link) {
+                    if (strpos($matches[0], "sectionedit-link") !== false) return $matches[0];
+                    return $matches[1] . $matches[2] . ' ' . $link . $matches[3];
+                },
+                $modifiedText,
+                1
+            );
+            if (!is_null($modifiedTitle)) $modifiedText = $modifiedTitle;
+        }
+        return $modifiedText === $text ? null : $modifiedText;
     }
 
     public function onParsePageExtra($page, $name) {
@@ -196,7 +211,7 @@ class YellowSectionedit {
 
     private function getSectionId() {
         $id = trim($this->yellow->page->getRequest("section"));
-        return preg_match('/^[1-9][0-9]*(?:\.[1-9][0-9]*)*$/', $id) ? $id : "";
+        return preg_match('/^(?:0|[1-9][0-9]*(?:\\.[1-9][0-9]*)*)$/', $id) ? $id : "";
     }
 
     private function saveSection($edit, $scheme, $address, $base, $location, $fileName, $rawDataSource, $endOfLine) {
@@ -277,8 +292,24 @@ class YellowSectionedit {
             $scheme, $address, $base, $location, $sectionId, $rawDataSource
         );
 
+        $languageData = method_exists($edit->response, "getLanguageData") ?
+            $edit->response->getLanguageData() : array();
+        $languageText = function($key, $fallback) use ($languageData) {
+            return isset($languageData[$key]) && trim($languageData[$key]) !== "" &&
+                $languageData[$key] !== "[" . $key . "]" ? $languageData[$key] : $fallback;
+        };
         $title = htmlspecialchars($section["title"], ENT_QUOTES, "UTF-8");
         $text = htmlspecialchars($sectionText, ENT_QUOTES, "UTF-8");
+        $formatLabel = htmlspecialchars($languageText("EditToolbarFormat", "Format"), ENT_QUOTES, "UTF-8");
+        $boldLabel = htmlspecialchars($languageText("EditToolbarBold", "Bold"), ENT_QUOTES, "UTF-8");
+        $italicLabel = htmlspecialchars($languageText("EditToolbarItalic", "Italic"), ENT_QUOTES, "UTF-8");
+        $strikeLabel = htmlspecialchars($languageText("EditToolbarStrikethrough", "Strikethrough"), ENT_QUOTES, "UTF-8");
+        $codeLabel = htmlspecialchars($languageText("EditToolbarCode", "Code"), ENT_QUOTES, "UTF-8");
+        $listLabel = htmlspecialchars($languageText("EditToolbarList", "List"), ENT_QUOTES, "UTF-8");
+        $linkLabel = htmlspecialchars($languageText("EditToolbarLink", "Link"), ENT_QUOTES, "UTF-8");
+        $previewLabel = htmlspecialchars($languageText("EditToolbarPreview", "Preview"), ENT_QUOTES, "UTF-8");
+        $cancelLabel = htmlspecialchars($languageText("EditCancelButton", "Cancel"), ENT_QUOTES, "UTF-8");
+        $saveLabel = htmlspecialchars($languageText("EditEditButton", "Save"), ENT_QUOTES, "UTF-8");
         $source = htmlspecialchars($rawDataSource, ENT_QUOTES, "UTF-8");
         $eol = htmlspecialchars($endOfLine, ENT_QUOTES, "UTF-8");
         $id = htmlspecialchars($sectionId, ENT_QUOTES, "UTF-8");
@@ -321,18 +352,18 @@ class YellowSectionedit {
         $html .= '<input type="hidden" name="rawdataendofline" value="' . $eol . '">';
         $html .= '<div id="sectionedit-toolbar">';
         $html .= '<ul class="yellow-toolbar yellow-toolbar-left sectionedit-toolbar-buttons">';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="format" aria-label="Format"><i class="yellow-icon yellow-icon-format"></i></a></li>';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="bold" aria-label="Bold"><i class="yellow-icon yellow-icon-bold"></i></a></li>';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="italic" aria-label="Italic"><i class="yellow-icon yellow-icon-italic"></i></a></li>';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="strikethrough" aria-label="Strikethrough"><i class="yellow-icon yellow-icon-strikethrough"></i></a></li>';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="code" aria-label="Code"><i class="yellow-icon yellow-icon-code"></i></a></li>';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="list" aria-label="List"><i class="yellow-icon yellow-icon-list"></i></a></li>';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="link" aria-label="Link"><i class="yellow-icon yellow-icon-link"></i></a></li>';
-        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="preview" aria-label="Preview"><i class="yellow-icon yellow-icon-preview"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="format" aria-label="' . $formatLabel . '"><i class="yellow-icon yellow-icon-format"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="bold" aria-label="' . $boldLabel . '"><i class="yellow-icon yellow-icon-bold"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="italic" aria-label="' . $italicLabel . '"><i class="yellow-icon yellow-icon-italic"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="strikethrough" aria-label="' . $strikeLabel . '"><i class="yellow-icon yellow-icon-strikethrough"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="code" aria-label="' . $codeLabel . '"><i class="yellow-icon yellow-icon-code"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="list" aria-label="' . $listLabel . '"><i class="yellow-icon yellow-icon-list"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="link" aria-label="' . $linkLabel . '"><i class="yellow-icon yellow-icon-link"></i></a></li>';
+        $html .= '<li><a href="#" class="yellow-toolbar-btn-icon yellow-toolbar-tooltip" data-section-action="preview" aria-label="' . $previewLabel . '"><i class="yellow-icon yellow-icon-preview"></i></a></li>';
         $html .= '</ul>';
         $html .= '<ul class="yellow-toolbar yellow-toolbar-right sectionedit-toolbar-main">';
-        $html .= '<li><a href="' . $cancelUrl . '" class="yellow-toolbar-btn">Cancel</a></li>';
-        $html .= '<li><a href="#" id="sectionedit-submit" class="yellow-toolbar-btn yellow-toolbar-btn-edit" data-section-action="save">Save</a></li>';
+        $html .= '<li><a href="' . $cancelUrl . '" class="yellow-toolbar-btn">' . $cancelLabel . '</a></li>';
+        $html .= '<li><a href="#" id="sectionedit-submit" class="yellow-toolbar-btn yellow-toolbar-btn-edit" data-section-action="save">' . $saveLabel . '</a></li>';
         $html .= '</ul>';
         $html .= '<ul class="yellow-toolbar yellow-toolbar-banner"></ul>';
         $html .= '</div>';
@@ -382,6 +413,7 @@ class YellowSectionedit {
         $target = $this->findSection($sections, $sectionId);
         if (!$target) return "";
 
+        if ($sectionId === "0") return "";
         $anchor = $this->yellow->lookup->normaliseName($target["title"], true, false, true);
         if (is_string_empty($anchor)) return "";
 
@@ -549,6 +581,24 @@ class YellowSectionedit {
             }
             $sections[$i]["end"] = $end;
             $sections[$i]["endLine"] = $endLine;
+        }
+
+        // Section 0 contains non-empty Markdown before the first heading, or
+        // the whole page when it has no headings. Start after front matter.
+        $preambleStart = $frontMatterEnd > 0 ? $lines[$frontMatterEnd - 1]["end"] : 0;
+        $preambleEnd = count($sections) > 0 ? $sections[0]["start"] : strlen($text);
+        if ($preambleEnd > $preambleStart &&
+            trim(substr($text, $preambleStart, $preambleEnd - $preambleStart)) !== "") {
+            array_unshift($sections, array(
+                "id" => "0",
+                "level" => 0,
+                "type" => "preamble",
+                "title" => "Page introduction",
+                "startLine" => $frontMatterEnd,
+                "endLine" => count($sections) > 0 ? $sections[0]["startLine"] : count($lines),
+                "start" => $preambleStart,
+                "end" => $preambleEnd,
+            ));
         }
         return $sections;
     }
