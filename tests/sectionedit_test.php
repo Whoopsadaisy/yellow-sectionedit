@@ -15,8 +15,33 @@ $se = new YellowSectionedit();
 
 $source = "## Section 1\n\n### Section 1.1\n\nText\n\n## Section 2\n\nText\n\n## Section 3\n";
 $sections = $se->scan($source);
+$sections = $se->scan($source);
 assertSameValue(["1","1.1","2","3"], array_column($sections, "id"), "structural section IDs");
 assertSameValue([2,3,2,2], array_column($sections, "level"), "heading levels");
+
+
+$source = "Intro text before the first heading.\n\n## First\n\nSection text\n\n### Child\n\nChild text\n\n## Second\n";
+$sections = $se->scan($source);
+assertSameValue(["0","1","1.1","2"], array_column($sections, "id"), "preamble must not shift heading IDs");
+assertSameValue("preamble", $sections[0]["type"], "leading content has a dedicated preamble section");
+assertSameValue("Intro text before the first heading.\n\n", substr($source, $sections[0]["start"], $sections[0]["end"] - $sections[0]["start"]), "preamble offsets stop before first heading");
+
+$source = "---\ntitle: Front matter title\n---\n\nIntro text after front matter.\n\n## First\n";
+$sections = $se->scan($source);
+assertSameValue(["0","1"], array_column($sections, "id"), "front matter preamble keeps normal heading IDs");
+$preambleText = substr($source, $sections[0]["start"], $sections[0]["end"] - $sections[0]["start"]);
+if (strpos($preambleText, "title: Front matter title") !== false || strpos($preambleText, "Intro text after front matter.") === false) {
+    fail("preamble must exclude front matter while retaining leading page text");
+}
+
+$source = "## First\n\nText\n";
+$sections = $se->scan($source);
+assertSameValue(["1"], array_column($sections, "id"), "pages without leading text must not get section 0");
+
+$source = "Only page text, with no headings.\n";
+$sections = $se->scan($source);
+assertSameValue(["0"], array_column($sections, "id"), "a page without headings can still edit its leading content");
+assertSameValue($source, substr($source, $sections[0]["start"], $sections[0]["end"] - $sections[0]["start"]), "preamble-only page offsets");
 
 $source = "---\ntitle: Test\n---\n\n# Real\n\n```\n# Not a heading\n```\n\n## Child\n";
 $sections = $se->scan($source);
