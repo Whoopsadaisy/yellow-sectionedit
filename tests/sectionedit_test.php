@@ -15,7 +15,6 @@ $se = new YellowSectionedit();
 
 $source = "## Section 1\n\n### Section 1.1\n\nText\n\n## Section 2\n\nText\n\n## Section 3\n";
 $sections = $se->scan($source);
-$sections = $se->scan($source);
 assertSameValue(["1","1.1","2","3"], array_column($sections, "id"), "structural section IDs");
 assertSameValue([2,3,2,2], array_column($sections, "level"), "heading levels");
 
