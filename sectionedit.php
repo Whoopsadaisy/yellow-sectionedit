@@ -64,7 +64,8 @@ class YellowSectionedit {
             if (is_null($modifiedContent)) $modifiedContent = $content;
         }
         $modifiedText = str_replace($content, $modifiedContent, $text);
-        if ($preamble) {
+        // Section 0 is always available, including when the preamble is empty.
+        if ($preamble !== null) {
             $url = $baseUrl . (strpos($baseUrl, "?") === false ? "?" : "&") . "section=0";
             $url = htmlspecialchars($url, ENT_QUOTES, "UTF-8");
             $label = htmlspecialchars("Edit page introduction", ENT_QUOTES, "UTF-8");
@@ -587,8 +588,9 @@ class YellowSectionedit {
         // the whole page when it has no headings. Start after front matter.
         $preambleStart = $frontMatterEnd > 0 ? $lines[$frontMatterEnd - 1]["end"] : 0;
         $preambleEnd = count($sections) > 0 ? $sections[0]["start"] : strlen($text);
-        if ($preambleEnd > $preambleStart &&
-            trim(substr($text, $preambleStart, $preambleEnd - $preambleStart)) !== "") {
+        // Section 0 always exists, even when the preamble is currently empty.
+        // This lets users add an introduction to pages that start with a heading.
+        if ($preambleEnd >= $preambleStart) {
             array_unshift($sections, array(
                 "id" => "0",
                 "level" => 0,
