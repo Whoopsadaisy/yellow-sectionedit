@@ -15,8 +15,8 @@ $se = new YellowSectionedit();
 
 $source = "## Section 1\n\n### Section 1.1\n\nText\n\n## Section 2\n\nText\n\n## Section 3\n";
 $sections = $se->scan($source);
-assertSameValue(["1","1.1","2","3"], array_column($sections, "id"), "structural section IDs");
-assertSameValue([2,3,2,2], array_column($sections, "level"), "heading levels");
+assertSameValue(["0","1","1.1","2","3"], array_column($sections, "id"), "structural section IDs with empty preamble");
+assertSameValue([0,2,3,2,2], array_column($sections, "level"), "heading levels");
 
 
 $source = "Intro text before the first heading.\n\n## First\n\nSection text\n\n### Child\n\nChild text\n\n## Second\n";
@@ -35,7 +35,8 @@ if (strpos($preambleText, "title: Front matter title") !== false || strpos($prea
 
 $source = "## First\n\nText\n";
 $sections = $se->scan($source);
-assertSameValue(["1"], array_column($sections, "id"), "pages without leading text must not get section 0");
+assertSameValue(["0","1"], array_column($sections, "id"), "pages without leading text still get an empty section 0");
+assertSameValue("", trim(substr($source, $sections[0]["start"], $sections[0]["end"] - $sections[0]["start"])), "empty preamble remains empty");
 
 $source = "Only page text, with no headings.\n";
 $sections = $se->scan($source);
@@ -44,16 +45,16 @@ assertSameValue($source, substr($source, $sections[0]["start"], $sections[0]["en
 
 $source = "---\ntitle: Test\n---\n\n# Real\n\n```\n# Not a heading\n```\n\n## Child\n";
 $sections = $se->scan($source);
-assertSameValue(["1","1.1"], array_column($sections, "id"), "front matter/fenced code exclusion");
+assertSameValue(["0","1","1.1"], array_column($sections, "id"), "front matter/fenced code exclusion with empty preamble");
 
 $source = "## chapter 1\n\nblabla\n\n## chapter 2\n\nblabla";
 $sections = $se->scan($source);
-$first = $sections[0];
+$first = $sections[1];
 assertSameValue("## chapter 1\n\nblabla\n\n", substr($source, $first["start"], $first["end"] - $first["start"]), "section boundary preserves separator before next heading");
 
 $posted = "## chapter 1\n\nblabla\n\n## chapter 2\n\nblabla";
 $sections = $se->scan($posted);
-$first = $sections[0];
+$first = $sections[1];
 $sectionEdit = "## chapter 1\n\nblabla\nnewcontent";
 $eol = "lf";
 if ($first["end"] < strlen($posted) && !preg_match('/(?:\r\n|\r|\n)$/', $sectionEdit)) {
@@ -64,7 +65,7 @@ assertSameValue("## chapter 1\n\nblabla\nnewcontent\n## chapter 2\n\nblabla", $r
 
 $posted = "## chapter 1\r\n\r\nblabla\r\n\r\n## chapter 2\r\n";
 $sections = $se->scan($posted);
-$first = $sections[0];
+$first = $sections[1];
 $sectionEdit = "## chapter 1\r\n\r\nblabla\r\nnewcontent";
 $eol = "crlf";
 if ($first["end"] < strlen($posted) && !preg_match('/(?:\r\n|\r|\n)$/', $sectionEdit)) {
