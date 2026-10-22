@@ -4,7 +4,7 @@ SectionEdit adds editing of individual Markdown sections while keeping Yellow's 
 
 ## Version
 
-0.1.28
+0.1.29
 
 ## Requirements
 
@@ -20,5 +20,7 @@ Download the repository ZIP from the `main` branch and install it as a Yellow ex
 Sections use structural IDs such as `1`, `1.1`, `1.1.2`. ATX and Setext headings are supported; front matter and fenced code blocks are ignored by the scanner.
 
 ## Current UI
+
+The page title also provides an edit link for non-empty text before the first heading. Section 0 is reserved for that preamble and does not change heading IDs. Toolbar labels, Save, and Cancel use Yellow Edit language translations.
 
 The section editor reuses Yellow's Edit stylesheet and site theme, keeps the framed editing area, and provides Save/Cancel links with section-anchor return behavior.

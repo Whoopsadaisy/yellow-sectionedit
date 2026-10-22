@@ -2,6 +2,7 @@ name: SectionEdit tests
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -28,9 +29,9 @@ jobs:
           php tests/yellow_integration_test.php
 
       - name: Build SectionEdit package
-        run: zip -j yellow-sectionedit-0.1.28.zip sectionedit.php extension.ini
+        run: zip -j yellow-sectionedit-0.1.29.zip sectionedit.php extension.ini
       - name: Upload SectionEdit package
         uses: actions/upload-artifact@v4
         with:
-          name: yellow-sectionedit-0.1.28
-          path: yellow-sectionedit-0.1.28.zip
+          name: yellow-sectionedit-0.1.29
+          path: yellow-sectionedit-0.1.29.zip

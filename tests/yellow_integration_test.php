@@ -91,5 +91,29 @@ list($actionUrl, $cancelUrl) =
 same("http://example.test/yellow/edit/wiki/?action=edit&section=1", $actionUrl, "SectionEdit action URL must retain the directory trailing slash");
 same("http://example.test/yellow/wiki/#pages", $cancelUrl, "SectionEdit cancel URL must retain the directory trailing slash");
 
-echo "PASS: SectionEdit URL generation/refactoring tests\n";
+/* Verify that SectionEdit renders the localized button labels returned by
+   YellowEditResponse::getLanguageData(), not English fallbacks. */
+$yellow->language->setText("editCancelButton", "Abbrechen", "de");
+$yellow->language->setText("editEditButton", "Speichern", "de");
+$edit->response->language = "de";
+$_REQUEST["section"] = "1";
+$showEditor = new ReflectionMethod("YellowSectionedit", "showEditor");
+$showEditor->setAccessible(true);
+ob_start();
+$showEditor->invoke(
+    $sectionedit, $edit, "http", "example.test", "/yellow",
+    "/wiki/", "content/2-wiki/page.md", "## Pages\n\nSome text\n", "\n"
+);
+$editorHtml = ob_get_clean();
+if (strpos($editorHtml, ">Abbrechen</a>") === false) {
+    failTest("SectionEdit Cancel button must use the German translation");
+}
+if (strpos($editorHtml, ">Speichern</a>") === false) {
+    failTest("SectionEdit Save button must use the German translation");
+}
+if (strpos($editorHtml, ">Cancel</a>") !== false || strpos($editorHtml, ">Save</a>") !== false) {
+    failTest("SectionEdit must not fall back to English when German translations exist");
+}
+
+echo "PASS: SectionEdit URL generation and localized button tests\n";
 
