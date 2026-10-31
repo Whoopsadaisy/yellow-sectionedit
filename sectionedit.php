@@ -50,8 +50,11 @@ class YellowSectionedit {
                 '#(<h([1-6])\b[^>]*>)(.*?)(</h\2>)#is',
                 function($matches) use (&$index, $headingSections, $baseUrl) {
                     if ($index >= count($headingSections)) return $matches[0];
-                    $section = $headingSections[$index++];
+                    $section = $headingSections[$index];
+                    // Do not consume a Markdown section when the rendered heading
+                    // level differs. A mismatch must not shift every later link.
                     if ((int)$matches[2] != $section["level"]) return $matches[0];
+                    $index++;
                     $url = $baseUrl . (strpos($baseUrl, "?") === false ? "?" : "&") .
                         "section=" . rawurlencode($section["id"]);
                     $url = htmlspecialchars($url, ENT_QUOTES, "UTF-8");
