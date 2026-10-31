@@ -609,7 +609,7 @@ class YellowSectionedit {
     }
 
     private function parseAtxHeading($line) {
-        if (!preg_match('/^ {0,3}(#{1,6})(?:[ \t]+|$)(.*)$/', $line, $m)) return null;
+        if (!preg_match('/^ {0,3}(#{1,6})[ \t]*(.*)$/', $line, $m)) return null;
         return array(
             "level" => strlen($m[1]),
             "title" => $m[2],
