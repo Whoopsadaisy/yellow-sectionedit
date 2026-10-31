@@ -38,6 +38,11 @@ $sections = $se->scan($source);
 assertSameValue(["0","1"], array_column($sections, "id"), "pages without leading text still get an empty section 0");
 assertSameValue("", trim(substr($source, $sections[0]["start"], $sections[0]["end"] - $sections[0]["start"])), "empty preamble remains empty");
 
+$source = "## First\n\n###direkten Zugriff auf Ports erlauben\n\nText\n\n## Installation mit Caddy\n\n### docker-compose.yaml\n\n### Caddyfile\n";
+$sections = $se->scan($source);
+assertSameValue(["0","1","1.1","2","2.1","2.2"], array_column($sections, "id"), "headings without whitespace after hashes must not shift section IDs");
+assertSameValue("direkten Zugriff auf Ports erlauben", $sections[2]["title"], "heading without whitespace is detected");
+
 $source = "Only page text, with no headings.\n";
 $sections = $se->scan($source);
 assertSameValue(["0"], array_column($sections, "id"), "a page without headings can still edit its leading content");
